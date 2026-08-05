@@ -46,16 +46,34 @@ Cells that call external APIs are marked **[KEY REQUIRED]**."""
 
 # ── Cell 0: sys.path ──────────────────────────────────────────────────────────
 cells.append(code(
-"""# Cell 0 — run this first; adds repo root to sys.path
-import sys
+"""# Cell 0 — run this first every session
+# Adds repo root to sys.path and loads API keys from .env if present.
+import sys, os
 from pathlib import Path
 
 REPO_ROOT = Path("__file__").resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-print("Repo root:", REPO_ROOT)
-print("Python:", sys.version)"""
+# Auto-load .env from repo root (never committed — see .env.example)
+_env_path = REPO_ROOT / ".env"
+if _env_path.exists():
+    for _line in _env_path.read_text().splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _k, _, _v = _line.partition("=")
+            os.environ.setdefault(_k.strip(), _v.strip())
+    print(f"Loaded keys from {_env_path}")
+else:
+    print(f"No .env found at {_env_path} — create it from .env.example")
+    print("  Or set keys manually: os.environ['VOYAGE_API_KEY'] = 'your-key'")
+
+voyage_set = bool(os.environ.get("VOYAGE_API_KEY"))
+gemini_set = bool(os.environ.get("GEMINI_API_KEY"))
+print(f"VOYAGE_API_KEY set : {voyage_set}")
+print(f"GEMINI_API_KEY set : {gemini_set}")
+print(f"Repo root          : {REPO_ROOT}")
+print(f"Python             : {sys.version}")"""
 ))
 
 # ── Section 1 ─────────────────────────────────────────────────────────────────
@@ -162,8 +180,7 @@ instantly.
 ))
 
 cells.append(code(
-"""# [KEY REQUIRED] VOYAGE_API_KEY
-# Set your GCP project here — used to access the GCS bucket where parsed docs live.
+"""# Set your GCP project here — used to access the GCS bucket where parsed docs live.
 GCP_PROJECT  = "project-7dfc6f6c-1703-48a3-83b"   # your active gcloud project
 GCP_LOCATION = "us-central1"
 
@@ -257,16 +274,7 @@ cells.append(md(
 ))
 
 cells.append(code(
-"""# [KEY REQUIRED] VOYAGE_API_KEY
-import os
-
-if not os.environ.get("VOYAGE_API_KEY"):
-    raise EnvironmentError(
-        "VOYAGE_API_KEY is not set.\\n"
-        "Stop Jupyter, run: export VOYAGE_API_KEY=your-key, then restart."
-    )
-
-from atlasfin.embedding import build as build_embedder
+"""from atlasfin.embedding import build as build_embedder
 
 embedder = build_embedder(cfg.embedding)
 print(f"Embedder model : {cfg.embedding.model_id}")
@@ -302,9 +310,7 @@ cells.append(md(
 """## 5. Local retrieval — dense + hybrid (no Vertex spend)
 
 Uses `LocalBruteForceVectorStore` (in-memory exact search) instead of Vertex AI.
-Requires the offline cache from Section 3.
-
-> **[KEY REQUIRED]** `VOYAGE_API_KEY`"""
+Loads from the artifacts built in Section 3."""
 ))
 
 cells.append(code(

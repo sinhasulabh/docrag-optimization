@@ -28,10 +28,10 @@ env/
 *.swp
 *.swo
 
-# Environment / secrets
+# Environment / secrets — never commit real keys
 .env
-.env.*
-*.local
+.env.local
+.env.*.local
 
 # Jupyter
 .ipynb_checkpoints/
