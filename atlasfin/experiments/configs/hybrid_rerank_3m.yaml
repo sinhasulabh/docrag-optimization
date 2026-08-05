@@ -1,0 +1,52 @@
+# Identical parsing/chunking/embedding to baseline_dense_3m.yaml on purpose: this keeps
+# offline_fingerprint() IDENTICAL between the two configs, so build_offline() reuses the
+# same cached artifact untouched -- the concrete demonstration of "changing an online knob
+# costs nothing offline" (acceptance criterion 3).
+name: hybrid_rerank_3m
+ingest_run_uri: gs://atlasfin-raw-dev/run=20260801t000036z/
+doc_names:
+  - 3M_2015_10K
+  - 3M_2016_10K
+  - 3M_2017_10K
+  - 3M_2018_10K
+  - 3M_2019_10K
+  - 3M_2020_10K
+  - 3M_2021_10K
+  - 3M_2022_10K
+gold_set_path: financebench_open_source.jsonl
+
+parsing:
+  backend: docling
+  ocr: auto
+  table_mode: structured
+  keep_images: false
+
+chunking:
+  strategy: structure_aware
+  max_tokens: 512
+  overlap_tokens: 64
+  contextual_prefix: false
+  metadata_fields: [section, pages, doc_type, doc_period, company]
+
+embedding:
+  model_id: voyage-finance-2
+  dimension: null  # voyage-finance-2's output_dimension truncation support is unverified
+  normalize: true
+  batch_size: 64
+
+retrieval:
+  mode: hybrid
+  fusion: rrf
+  bm25_weight: 0.5
+  top_k: 20
+  filters_enabled: false
+  parent_child: false
+  query_transform: none
+  index_type: flat
+  ann_search_param: 10
+
+reranking:
+  enabled: true
+  model_id: cross-encoder/ms-marco-MiniLM-L-6-v2
+  depth: 20
+  max_pair_tokens: 512

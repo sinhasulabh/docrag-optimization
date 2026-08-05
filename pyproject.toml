@@ -1,0 +1,33 @@
+[project]
+name = "atlasfin-ingest"
+version = "0.1.0"
+description = "AtlasFin ingestion pipeline: read source -> download to GCS -> parse (Docling)"
+requires-python = ">=3.10"
+dependencies = [
+    "requests>=2.31",
+    "google-cloud-storage>=2.16",
+    "docling>=2.0",
+    "google-genai>=1.0",
+    "google-cloud-aiplatform>=1.60",
+    "bm25s>=0.2",
+    "sentence-transformers>=3.0",
+    "pyyaml>=6.0",
+    "numpy>=1.26",
+    "voyageai>=0.5.0",
+]
+
+[project.scripts]
+atlasfin-ingest = "atlasfin_ingest.run:main"
+atlasfin-experiment = "atlasfin.pipeline.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["atlasfin_ingest*", "atlasfin*"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]

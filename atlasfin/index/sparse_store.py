@@ -1,0 +1,6 @@
+from typing import Protocol
+
+
+class SparseStore(Protocol):
+    def build(self, chunk_id_to_text: dict[str, str]) -> None: ...
+    def search(self, query_text: str, k: int) -> list[tuple[str, float]]: ...
