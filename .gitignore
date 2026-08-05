@@ -35,7 +35,8 @@ env/
 
 # Jupyter
 .ipynb_checkpoints/
-*.ipynb
+# track notebooks but ignore checkpoint files
+!notebooks/*.ipynb
 
 # pytest
 .pytest_cache/
