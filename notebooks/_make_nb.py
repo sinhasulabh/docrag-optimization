@@ -148,19 +148,31 @@ print(sample.evidence[0].evidence_text[:400], "...")"""
 
 # ── Section 3 ─────────────────────────────────────────────────────────────────
 cells.append(md(
-"""## 3. Chunks — inspect pre-built chunks from disk
+"""## 3. Build offline artifacts — parse → chunk → embed → BM25
 
-Loads chunks from the offline cache. If no cache exists yet, the cell says so and
-skips gracefully — run the CLI first to build it:
-```bash
-python -m atlasfin.pipeline.cli run --config atlasfin/experiments/configs/baseline_dense_3m.yaml
-```"""
+This is the main offline step. It reads your already-parsed documents from GCS,
+chunks them, embeds them with Voyage, and saves everything to a local cache keyed
+by the offline fingerprint. It only rebuilds if the fingerprint changes.
+
+**Set your GCP project below and run the cell.** It will take a few minutes the
+first time (embedding 8 x 10-K filings). On subsequent runs it loads from cache
+instantly.
+
+> **[KEY REQUIRED]** `VOYAGE_API_KEY`"""
 ))
 
 cells.append(code(
-"""import os
+"""# [KEY REQUIRED] VOYAGE_API_KEY
+# Set your GCP project here — used to access the GCS bucket where parsed docs live.
+GCP_PROJECT  = "project-7dfc6f6c-1703-48a3-83b"   # your active gcloud project
+GCP_LOCATION = "us-central1"
+
+import logging, os
 from atlasfin.pipeline.cache import offline_dir
 from atlasfin.index.chunk_store import ChunkStore
+
+logging.basicConfig(level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s — %(message)s")
 
 fp          = cfg.offline_fingerprint()
 off_dir     = offline_dir(fp)
@@ -168,61 +180,73 @@ chunks_path = off_dir / "chunks.jsonl"
 
 print(f"Offline fingerprint : {fp}")
 print(f"Cache dir           : {off_dir}")
-print(f"chunks.jsonl exists : {chunks_path.exists()}")
+print(f"Already cached      : {chunks_path.exists()}")
+print()
 
-if chunks_path.exists():
-    store  = ChunkStore.load(chunks_path)
-    chunks = store.all_chunks()
-    print(f"\\nLoaded {len(chunks)} chunks from cache.")
-else:
-    print("\\nNo cache found. Run the CLI (see cell docstring above) then re-run this cell.")
-    chunks = []"""
+if not chunks_path.exists():
+    print("Cache MISS — running parse → chunk → embed → BM25 ...")
+    print("(downloading parsed docs from GCS, embedding with Voyage — takes a few minutes)")
+
+from atlasfin.pipeline.offline import build_offline
+
+index = build_offline(
+    cfg,
+    spec.doc_names,
+    ingest_run_uri=spec.ingest_run_uri,
+    gcp_project=None,          # None = skip Vertex index creation (local smoke only)
+    gcp_location=GCP_LOCATION,
+    parse_device="auto",
+)
+
+store  = ChunkStore.load(index.chunks_path)
+chunks = store.all_chunks()
+print(f"\\nOffline build complete.")
+print(f"  Chunks          : {index.n_chunks}")
+print(f"  Cache dir       : {index.offline_dir}")"""
 ))
 
 cells.append(code(
-"""# Token distribution + chunks-per-doc charts (skips if no cache)
-if chunks:
-    import matplotlib.pyplot as plt
-    from collections import Counter
+"""# Inspect chunk distribution now that the cache is populated
+import matplotlib.pyplot as plt
+from collections import Counter
 
-    token_counts = [c.token_count for c in chunks]
-    fig, axes = plt.subplots(1, 2, figsize=(13, 4))
+token_counts = [c.token_count for c in chunks]
+fig, axes = plt.subplots(1, 2, figsize=(13, 4))
 
-    axes[0].hist(token_counts, bins=40, edgecolor="white", color="#4a90d9")
-    axes[0].axvline(cfg.chunking.max_tokens, color="tomato", linestyle="--",
-                    label=f"max_tokens={cfg.chunking.max_tokens}")
-    axes[0].set_xlabel("Token count (proxy tokenizer)")
-    axes[0].set_ylabel("Number of chunks")
-    axes[0].set_title("Chunk token distribution")
-    axes[0].legend()
+axes[0].hist(token_counts, bins=40, edgecolor="white", color="#4a90d9")
+axes[0].axvline(cfg.chunking.max_tokens, color="tomato", linestyle="--",
+                label=f"max_tokens={cfg.chunking.max_tokens}")
+axes[0].set_xlabel("Token count (proxy tokenizer)")
+axes[0].set_ylabel("Number of chunks")
+axes[0].set_title("Chunk token distribution")
+axes[0].legend()
 
-    per_doc = Counter(c.doc_name for c in chunks)
-    docs, counts = zip(*sorted(per_doc.items()))
-    axes[1].barh(docs, counts, color="#4a90d9", edgecolor="white")
-    axes[1].set_xlabel("Chunks")
-    axes[1].set_title("Chunks per document")
+per_doc = Counter(c.doc_name for c in chunks)
+docs, counts = zip(*sorted(per_doc.items()))
+axes[1].barh(docs, counts, color="#4a90d9", edgecolor="white")
+axes[1].set_xlabel("Chunks")
+axes[1].set_title("Chunks per document")
 
-    plt.tight_layout()
-    plt.show()
+plt.tight_layout()
+plt.show()
 
-    print(f"Total chunks : {len(chunks)}")
-    print(f"Avg tokens   : {sum(token_counts)/len(token_counts):.0f}")
-    print(f"Max tokens   : {max(token_counts)}")
-    print(f"Min tokens   : {min(token_counts)}")"""
+print(f"Total chunks : {len(chunks)}")
+print(f"Avg tokens   : {sum(token_counts)/len(token_counts):.0f}")
+print(f"Max tokens   : {max(token_counts)}")
+print(f"Min tokens   : {min(token_counts)}")"""
 ))
 
 cells.append(code(
 """# Print a few sample chunks
-if chunks:
-    for i, c in enumerate(chunks[:3]):
-        print(f"--- Chunk {i} ---")
-        print(f"  chunk_id    : {c.chunk_id}")
-        print(f"  doc_name    : {c.doc_name}")
-        print(f"  section     : {c.section}")
-        print(f"  pages       : {c.pages}")
-        print(f"  token_count : {c.token_count}")
-        print(f"  text[:200]  : {c.text[:200]}")
-        print()"""
+for i, c in enumerate(chunks[:3]):
+    print(f"--- Chunk {i} ---")
+    print(f"  chunk_id    : {c.chunk_id}")
+    print(f"  doc_name    : {c.doc_name}")
+    print(f"  section     : {c.section}")
+    print(f"  pages       : {c.pages}")
+    print(f"  token_count : {c.token_count}")
+    print(f"  text[:200]  : {c.text[:200]}")
+    print()"""
 ))
 
 # ── Section 4 ─────────────────────────────────────────────────────────────────
@@ -284,36 +308,28 @@ Requires the offline cache from Section 3.
 ))
 
 cells.append(code(
-"""# [KEY REQUIRED] VOYAGE_API_KEY
+"""# Wire up the local retriever from the index built in Section 3.
+# Uses LocalBruteForceVectorStore (exact in-memory search, no Vertex spend).
 import numpy as np
 from atlasfin.index.local_vector_store import LocalBruteForceVectorStore
 from atlasfin.index.bm25_store import BM25Store
 from atlasfin.index.chunk_store import ChunkStore
 from atlasfin.retrieval import build_local_smoke
 
-bm25_dir        = off_dir / "bm25"
-embeddings_path = off_dir / "embeddings.npy"
-chunk_ids_path  = off_dir / "chunk_ids.json"
+chunk_store  = ChunkStore.load(index.chunks_path)
+vector_store = LocalBruteForceVectorStore.load(index.embeddings_path, index.chunk_ids_path)
+bm25_store   = BM25Store.load(index.bm25_path) if index.bm25_path.exists() else None
 
-missing = [p for p in [chunks_path, embeddings_path, chunk_ids_path] if not p.exists()]
-if missing:
-    print("Missing offline artifacts:", [str(p) for p in missing])
-    print("Run the CLI first (see Section 3).")
-    retriever = bm25_store = chunk_store = vector_store = None
-else:
-    chunk_store  = ChunkStore.load(chunks_path)
-    vector_store = LocalBruteForceVectorStore.load(embeddings_path, chunk_ids_path)
-    bm25_store   = BM25Store.load(bm25_dir) if bm25_dir.exists() else None
-
-    retriever = build_local_smoke(
-        cfg.retrieval,
-        embedding_cfg=cfg.embedding,
-        chunking_cfg=cfg.chunking,
-        chunk_store=chunk_store,
-        vector_store=vector_store,
-    )
-    shape = vector_store._vectors.shape
-    print(f"Dense retriever ready — {len(chunk_store)} chunks, embedding matrix {shape}")"""
+retriever = build_local_smoke(
+    cfg.retrieval,
+    embedding_cfg=cfg.embedding,
+    chunking_cfg=cfg.chunking,
+    chunk_store=chunk_store,
+    vector_store=vector_store,
+)
+shape = vector_store._vectors.shape
+print(f"Dense retriever ready — {len(chunk_store)} chunks, embedding matrix {shape}")
+print(f"BM25 store loaded : {bm25_store is not None}")"""
 ))
 
 cells.append(code(
