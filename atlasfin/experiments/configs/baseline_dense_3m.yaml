@@ -9,6 +9,7 @@ doc_names:
   - 3M_2020_10K
   - 3M_2021_10K
   - 3M_2022_10K
+  - 3M_2023Q2_10Q
 gold_set_path: financebench_open_source.jsonl
 
 parsing:
@@ -25,7 +26,7 @@ chunking:
   metadata_fields: [section, pages, doc_type, doc_period, company]
 
 embedding:
-  model_id: voyage-finance-2
+  model_id: voyage-4
   dimension: null  # voyage-finance-2's output_dimension truncation support is unverified
   normalize: true
   batch_size: 64

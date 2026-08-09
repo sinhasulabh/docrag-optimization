@@ -36,7 +36,7 @@ def load_gold_set(path: str | Path, doc_names: list[str] | None = None) -> list[
             evidence = [
                 GoldEvidence(
                     doc_name=e["doc_name"],
-                    evidence_page_num=e["evidence_page_num"],
+                    evidence_page_num=e["evidence_page_num"] + 1,
                     evidence_text=e.get("evidence_text", ""),
                 )
                 for e in obj.get("evidence", [])

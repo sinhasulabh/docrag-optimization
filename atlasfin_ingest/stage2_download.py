@@ -211,6 +211,7 @@ def download_all(
             raw = fut.result()
             results[i] = raw
             manifest.append(raw)
+            manifest.flush()  # incremental -- a crash mid-stage must not lose already-recorded progress
 
     finished: list[RawObject] = [r for r in results if r is not None]
     n_done = sum(1 for r in finished if r.status == Status.DONE)

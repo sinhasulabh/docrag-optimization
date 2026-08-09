@@ -49,6 +49,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--companies", nargs="*", default=None)
     p.add_argument("--doc-names", nargs="*", default=None)
     p.add_argument("--local-scratch-dir", default=None)
+    p.add_argument(
+        "--run-id",
+        default=None,
+        help=(
+            "resume an existing run instead of starting a new one -- reuses its "
+            "bucket/prefix so already-downloaded/parsed docs are skipped and only "
+            "missing ones are (re)attempted, e.g. 20260808t221108z"
+        ),
+    )
     return p
 
 
@@ -78,10 +87,16 @@ def build_config(args: argparse.Namespace) -> Config:
     )
 
 
-def run(cfg: Config) -> int:
+def run(cfg: Config, run_id: str | None = None) -> int:
     logger = logging.getLogger("atlasfin_ingest.run")
-    run_id = build_run_id()
-    logger.info("run: starting run_id=%s bucket_strategy=%s", run_id, cfg.bucket_strategy)
+    resuming = run_id is not None
+    run_id = run_id or build_run_id()
+    logger.info(
+        "run: %s run_id=%s bucket_strategy=%s",
+        "resuming" if resuming else "starting",
+        run_id,
+        cfg.bucket_strategy,
+    )
 
     flt = SourceFilter(
         doc_types=cfg.filter_doc_types,
@@ -141,7 +156,7 @@ def main() -> None:
     _configure_logging()
     args = build_arg_parser().parse_args()
     cfg = build_config(args)
-    sys.exit(run(cfg))
+    sys.exit(run(cfg, run_id=args.run_id))
 
 
 if __name__ == "__main__":

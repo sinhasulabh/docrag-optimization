@@ -87,6 +87,20 @@ def parse_one(
             error=error,
         )
 
+    existing = gcs.get_blob_metadata(client, bucket, json_blob)
+    if existing is not None:
+        logger.info("stage3: %s already parsed at %s, skipping", raw.doc_name, gcs_parsed_uri)
+        return ParsedObject(
+            doc_name=raw.doc_name,
+            gcs_raw_uri=raw.gcs_raw_uri,
+            gcs_parsed_uri=gcs_parsed_uri,
+            page_count=0,
+            docling_version=docling_version,
+            parse_ms=_elapsed_ms(),
+            parsed_at=datetime.now(timezone.utc),
+            status=Status.SKIPPED,
+        )
+
     try:
         _, _, blob_name = raw.gcs_raw_uri.partition(f"gs://{bucket}/")
         gcs.download_blob_to_file(client, bucket, blob_name, local_pdf)
@@ -153,13 +167,16 @@ def parse_all(
             parsed = fut.result()
             results[i] = parsed
             manifest.append(parsed)
+            manifest.flush()  # incremental -- parse crashed mid-stage last time and lost all progress
 
     finished: list[ParsedObject] = [r for r in results if r is not None]
     n_done = sum(1 for r in finished if r.status == Status.DONE)
+    n_skipped = sum(1 for r in finished if r.status == Status.SKIPPED)
     n_failed = sum(1 for r in finished if r.status == Status.FAILED)
     logger.info(
-        "stage3: done=%d failed=%d (skipped upstream=%d)",
+        "stage3: done=%d skipped=%d failed=%d (ineligible upstream=%d)",
         n_done,
+        n_skipped,
         n_failed,
         len(raws) - len(eligible),
     )
