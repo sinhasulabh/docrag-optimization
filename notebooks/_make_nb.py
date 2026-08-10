@@ -83,7 +83,7 @@ cells.append(code(
 """import dataclasses, json
 from atlasfin.config.loader import load_experiment_config
 
-CONFIG_PATH = REPO_ROOT / "atlasfin/experiments/configs/baseline_dense_3m.yaml"
+CONFIG_PATH = REPO_ROOT / "atlasfin/experiments/configs/baseline_dense_full.yaml"
 
 spec = load_experiment_config(CONFIG_PATH)
 cfg  = spec.config
@@ -91,7 +91,7 @@ cfg  = spec.config
 print(f"Experiment name    : {cfg.name}")
 print(f"Offline fingerprint: {cfg.offline_fingerprint()}")
 print(f"Ingest run URI     : {spec.ingest_run_uri}")
-print(f"Docs to index      : {spec.doc_names}")
+print(f"Docs to index      : {len(spec.doc_names)} docs")
 print()
 print("--- Full config (JSON) ---")
 print(json.dumps(dataclasses.asdict(cfg), indent=2))"""
@@ -137,10 +137,10 @@ cells.append(code(
 GOLD_PATH = REPO_ROOT / "financebench_open_source.jsonl"
 
 gold_all = load_gold_set(GOLD_PATH)
-gold_3m  = load_gold_set(GOLD_PATH, doc_names=spec.doc_names)
+gold_scoped = load_gold_set(GOLD_PATH, doc_names=spec.doc_names)
 
 print(f"Total FinanceBench questions : {len(gold_all)}")
-print(f"Questions grounded in 3M docs: {len(gold_3m)}")
+print(f"Questions grounded in scoped docs: {len(gold_scoped)}")
 print()
 
 from collections import Counter
@@ -152,7 +152,7 @@ for company, count in companies.most_common(10):
 
 cells.append(code(
 """# Inspect a single gold record in detail
-sample = gold_3m[0]
+sample = gold_scoped[0]
 print(f"ID            : {sample.financebench_id}")
 print(f"Company       : {sample.company}")
 print(f"Doc           : {sample.doc_name}")
@@ -173,8 +173,8 @@ chunks them, embeds them with Voyage, and saves everything to a local cache keye
 by the offline fingerprint. It only rebuilds if the fingerprint changes.
 
 **Set your GCP project below and run the cell.** It will take a few minutes the
-first time (embedding 8 x 10-K filings). On subsequent runs it loads from cache
-instantly.
+first time for the full 288-doc corpus (chunking + embedding all filings). On
+subsequent runs it loads from cache instantly.
 
 > **[KEY REQUIRED]** `VOYAGE_API_KEY`"""
 ))
@@ -449,16 +449,16 @@ from atlasfin.eval.score import score as eval_score
 if retriever is None:
     print("Skipped: offline artifacts not found.")
 else:
-    print(f"Scoring {len(gold_3m)} questions ...")
+    print(f"Scoring {len(gold_scoped)} questions ...")
     results = []
-    for g in gold_3m:
+    for g in gold_scoped:
         t0    = time.perf_counter()
         cands = retriever.retrieve(g.question, k=cfg.retrieval.top_k)
         ms    = (time.perf_counter() - t0) * 1000
         results.append(AnswerResult(question=g.question, candidates=cands,
                                     retrieve_ms=ms, rerank_ms=None))
 
-    metrics = eval_score(results, gold_3m)
+    metrics = eval_score(results, gold_scoped)
     print("\\n--- Metrics (dense, no rerank) ---")
     print(f"  recall@5    : {metrics.recall_at[5]:.3f}")
     print(f"  recall@10   : {metrics.recall_at[10]:.3f}")
@@ -481,7 +481,7 @@ if retriever is not None:
     ax.set_ylim(0, 1.0)
     ax.set_xlabel("k")
     ax.set_ylabel("Recall@k")
-    ax.set_title(f"{cfg.name} — Recall@k ({len(gold_3m)} 3M questions)")
+    ax.set_title(f"{cfg.name} — Recall@k ({len(gold_scoped)} questions)")
     for i, (k, r) in enumerate(zip(ks, recalls)):
         ax.text(i, r + 0.01, f"{r:.2f}", ha="center", fontsize=11)
     plt.tight_layout()
@@ -492,15 +492,15 @@ if retriever is not None:
 cells.append(md(
 """## 8. Experiment comparison — diff two configs side-by-side
 
-`baseline_dense_3m` vs `hybrid_rerank_3m`.
+`baseline_dense_full` vs `hybrid_rerank_full`.
 Both share the same offline fingerprint, so no rebuild is needed for B."""
 ))
 
 cells.append(code(
 """from atlasfin.config.loader import load_experiment_config
 
-spec_a = load_experiment_config(REPO_ROOT / "atlasfin/experiments/configs/baseline_dense_3m.yaml")
-spec_b = load_experiment_config(REPO_ROOT / "atlasfin/experiments/configs/hybrid_rerank_3m.yaml")
+spec_a = load_experiment_config(REPO_ROOT / "atlasfin/experiments/configs/baseline_dense_full.yaml")
+spec_b = load_experiment_config(REPO_ROOT / "atlasfin/experiments/configs/hybrid_rerank_full.yaml")
 
 fp_a, fp_b = spec_a.config.offline_fingerprint(), spec_b.config.offline_fingerprint()
 print(f"Config A: {spec_a.config.name}  fingerprint: {fp_a}")
@@ -545,7 +545,7 @@ if retriever is not None and bm25_store is not None:
     reranker_b = build_reranker(spec_b.config.reranking)
 
     results_b = []
-    for g in gold_3m:
+    for g in gold_scoped:
         t0    = time.perf_counter()
         cands = hybrid_retriever_b.retrieve(g.question, k=spec_b.config.retrieval.top_k)
         r_ms  = (time.perf_counter() - t0) * 1000
@@ -555,7 +555,7 @@ if retriever is not None and bm25_store is not None:
         results_b.append(AnswerResult(question=g.question, candidates=cands,
                                       retrieve_ms=r_ms, rerank_ms=rr_ms))
 
-    metrics_b = eval_score(results_b, gold_3m)
+    metrics_b = eval_score(results_b, gold_scoped)
 
     comparison = pd.DataFrame([
         {"metric": "recall@5",     "A (dense)": f"{metrics.recall_at[5]:.3f}",   "B (hybrid+rerank)": f"{metrics_b.recall_at[5]:.3f}"},
@@ -585,7 +585,7 @@ cells.append(code(
 if retriever is not None:
     miss_at_5_hit_at_20 = [
         (g, res)
-        for g, res in zip(gold_3m, results)
+        for g, res in zip(gold_scoped, results)
         if not any(_is_hit(c, g.evidence) for c in res.candidates[:5])
         and     any(_is_hit(c, g.evidence) for c in res.candidates[:20])
     ]

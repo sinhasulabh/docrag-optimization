@@ -21,7 +21,7 @@ class ChunkingConfig:  # all [offline]
 
 @dataclass
 class EmbeddingConfig:  # all [offline]
-    model_id: str = "voyage-4"  # finance-domain-tuned
+    model_id: str = "voyage-4"  # general-purpose; voyage-finance-2 is the finance-tuned alternative
     dimension: int | None = None  # MRL truncation; None = model native
     normalize: bool = True
     batch_size: int = 64

@@ -18,10 +18,11 @@ def _l2_normalize(vec: list[float]) -> list[float]:
 
 
 class VoyageEmbedder:
-    """Voyage AI embeddings -- voyage-finance-2 is domain-tuned for financial filings,
-    which is why it's the default here rather than a general-purpose model. Uses
-    VOYAGE_API_KEY, a standalone Voyage credential -- separate from GEMINI_API_KEY, which is
-    still used for the generative LLM pieces (retrieval/query_transform.py,
+    """Voyage AI embeddings -- model_id is set by EmbeddingConfig (default: voyage-4,
+    general-purpose). voyage-finance-2 is domain-tuned for financial filings and is
+    available as a config override (see atlasfin/experiments/configs/), but is NOT the
+    default. Uses VOYAGE_API_KEY, a standalone Voyage credential -- separate from
+    GEMINI_API_KEY, which is still used for the generative LLM pieces (retrieval/query_transform.py,
     chunking/contextual.py). Retries are handled by the voyageai SDK itself (max_retries=) for
     RateLimitError/ServiceUnavailableError/Timeout -- but NOT for a bare dropped connection
     (observed in practice as APIConnectionError over a long sequential embedding run), so
