@@ -80,8 +80,14 @@ class StructureAwareChunker:
 
         chunks: list[Chunk] = []
         for i, dc in enumerate(doc_chunks):
-            headings = tuple(dc.meta.headings or [])
             text = dc.text
+            if not text.strip():
+                # observed in practice: a heading-only element (e.g. a dropped table or
+                # page-break artifact) with no extractable body text -- useless for retrieval,
+                # and Voyage's embed API rejects empty strings outright.
+                continue
+
+            headings = tuple(dc.meta.headings or [])
             pages = sorted({prov.page_no for item in dc.meta.doc_items for prov in item.prov})
             section_slug = slugify_section(headings[-1] if headings else "")
 

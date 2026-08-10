@@ -2,6 +2,7 @@ import math
 import os
 
 import voyageai
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from atlasfin.config.schema import EmbeddingConfig
 
@@ -21,7 +22,10 @@ class VoyageEmbedder:
     which is why it's the default here rather than a general-purpose model. Uses
     VOYAGE_API_KEY, a standalone Voyage credential -- separate from GEMINI_API_KEY, which is
     still used for the generative LLM pieces (retrieval/query_transform.py,
-    chunking/contextual.py). Retries are handled by the voyageai SDK itself (max_retries=).
+    chunking/contextual.py). Retries are handled by the voyageai SDK itself (max_retries=) for
+    RateLimitError/ServiceUnavailableError/Timeout -- but NOT for a bare dropped connection
+    (observed in practice as APIConnectionError over a long sequential embedding run), so
+    _embed_batch adds its own retry layer for that specific case.
     """
 
     def __init__(self, cfg: EmbeddingConfig, api_key: str | None = None):
@@ -49,6 +53,12 @@ class VoyageEmbedder:
             vectors.extend(self._embed_batch(batch, input_type))
         return vectors
 
+    @retry(
+        retry=retry_if_exception_type(voyageai.error.APIConnectionError),
+        stop=stop_after_attempt(5),
+        wait=wait_exponential(multiplier=1, min=1, max=20),
+        reraise=True,
+    )
     def _embed_batch(self, batch: list[str], input_type: str) -> list[list[float]]:
         kwargs: dict = dict(texts=batch, model=self._cfg.model_id, input_type=input_type)
         # NOT verified offline whether voyage-finance-2 (an older, "voyage-2"-generation
