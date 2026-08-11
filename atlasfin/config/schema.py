@@ -35,6 +35,11 @@ class RetrievalConfig:  # all [online]
     top_k: int = 20  # candidate pool size (recall ceiling)
     filters_enabled: bool = False  # metadata pre-filtering
     parent_child: bool = False  # retrieve child, hand off parent
+    parent_child_max_page_range: int = 2  # cap on (max_page - min_page + 1) across the
+    # sibling group; NOT a count of distinct pages -- two chunks sharing a heading can land
+    # on page 1 and page 124 (heading-detection collision, e.g. a repeated document title),
+    # which a distinct-page-count check would miss entirely. Oversized groups fall back to
+    # child-only payload_text/pages instead of widening -- see ChunkStore.siblings()
     query_transform: str = "none"  # none | rewrite | decompose | hyde
     query_model: str | None = None  # LLM for the transform
     # ANN index params

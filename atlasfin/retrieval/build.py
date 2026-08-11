@@ -109,9 +109,17 @@ def build_local_smoke(
     """
     embedder = build_embedder(embedding_cfg)
     if cfg.mode == "dense":
-        return DenseRetriever(embedder, vector_store, chunk_store, cfg, chunking_cfg)
-    if cfg.mode == "hybrid":
+        base: Retriever = DenseRetriever(embedder, vector_store, chunk_store, cfg, chunking_cfg)
+    elif cfg.mode == "hybrid":
         if bm25_store is None:
             raise ValueError("retrieval.mode='hybrid' requires a bm25_store")
-        return HybridRetriever(embedder, vector_store, bm25_store, chunk_store, cfg, chunking_cfg)
-    raise ValueError(f"retrieval.mode must be dense|hybrid, got {cfg.mode!r}")
+        base = HybridRetriever(embedder, vector_store, bm25_store, chunk_store, cfg, chunking_cfg)
+    else:
+        raise ValueError(f"retrieval.mode must be dense|hybrid, got {cfg.mode!r}")
+
+    if cfg.query_transform == "none":
+        return base
+
+    from .query_transform import TransformingRetriever
+
+    return TransformingRetriever(base, _build_transformer(cfg))

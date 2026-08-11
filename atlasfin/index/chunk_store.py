@@ -1,4 +1,5 @@
 import json
+from collections import defaultdict
 from dataclasses import asdict
 from pathlib import Path
 
@@ -13,6 +14,13 @@ class ChunkStore:
     def __init__(self, chunks: list[Chunk] | None = None):
         self._chunks: dict[str, Chunk] = {c.chunk_id: c for c in (chunks or [])}
         self._order: list[str] = [c.chunk_id for c in (chunks or [])]
+        # parent_chunk_id -> every chunk_id sharing it (incl. itself) -- built once here so
+        # RetrievalConfig.parent_child can widen a candidate's payload/pages to the whole
+        # section without a per-query linear scan. See candidate_builder.hydrate().
+        self._siblings_by_parent: dict[str, list[str]] = defaultdict(list)
+        for c in chunks or []:
+            if c.parent_chunk_id is not None:
+                self._siblings_by_parent[c.parent_chunk_id].append(c.chunk_id)
 
     def __len__(self) -> int:
         return len(self._chunks)
@@ -32,6 +40,16 @@ class ChunkStore:
         """
         chunk = self.get(chunk_id)
         return chunk.parent_text if chunk.parent_text is not None else chunk.text
+
+    def siblings(self, chunk_id: str) -> list[Chunk]:
+        """All chunks in the same section group as chunk_id, including itself -- i.e. the
+        chunks whose concatenated text makes up chunk.parent_text. Returns just [chunk] for
+        a single-chunk section (no parent_chunk_id).
+        """
+        chunk = self.get(chunk_id)
+        if chunk.parent_chunk_id is None:
+            return [chunk]
+        return [self._chunks[cid] for cid in self._siblings_by_parent[chunk.parent_chunk_id]]
 
     def save(self, path: str | Path) -> None:
         path = Path(path)

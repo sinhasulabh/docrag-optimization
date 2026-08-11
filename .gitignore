@@ -47,3 +47,6 @@ coverage.xml
 # Distribution
 *.whl
 *.tar.gz
+
+# Local Claude Code project notes — not meant for the shared repo
+CLAUDE.md
